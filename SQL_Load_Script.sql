@@ -1,93 +1,123 @@
--- Load data into FIDE Chess Database
-
--- IMPORTANT: run using the sqlite3 CLI with ".read SQL_Schema.sql" first to create schema,
--- then ".read SQL_Load_Script.sql" to load data. Ensure you're in the directory containing Data/.
-
--- Players staging imports
-DROP TABLE IF EXISTS players_staging;
-CREATE TABLE players_staging (
-    fide_id TEXT,
-    nom TEXT,
-    titre TEXT,
-    sexe TEXT,
-    pays TEXT,
-    age INTEGER,
-    annee_naissance INTEGER,
-    elo_standard INTEGER,
-    elo_rapid INTEGER,
-    elo_blitz INTEGER
-);
+.headers off
 .mode csv
-.import Data/FIDE_Avril_2025.csv players_staging
-.import Data/FIDE_Mars_2025.csv players_staging
+.separator ","
 
--- Final players table
-DELETE FROM players;
-INSERT OR IGNORE INTO players
-SELECT DISTINCT
-    fide_id,
-    nom,
-    titre,
-    sexe,
-    pays,
-    age,
-    annee_naissance,
-    elo_standard,
-    elo_rapid,
-    elo_blitz
-FROM players_staging;
+PRAGMA foreign_keys = OFF;
+BEGIN TRANSACTION;
 
--- Rankings imports
-DROP TABLE IF EXISTS rankings;
-CREATE TABLE rankings (
-    ranking_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    fide_id TEXT,
-    date TEXT,
-    elo_standard INTEGER,
-    elo_rapid INTEGER,
-    elo_blitz INTEGER
+------------------------------------------------------------
+-- Players  (CSV = 11 colonnes → table finale = 7)
+------------------------------------------------------------
+DROP TABLE IF EXISTS players_tmp;
+CREATE TABLE players_tmp (
+    fide_id        INTEGER,
+    name           TEXT,
+    title          TEXT,
+    country        TEXT,
+    elo_standard   INTEGER,
+    elo_rapid      INTEGER,
+    elo_blitz      INTEGER,
+    birth_year     INTEGER,
+    gender         TEXT,
+    age            INTEGER,
+    dummy          TEXT
 );
-.mode csv
-.import Data/Rankings_Avril.csv rankings
-.import Data/Rankings_Mars.csv rankings
 
--- Tournaments imports
-DROP TABLE IF EXISTS tournaments;
-CREATE TABLE tournaments (
-    tournament_id INTEGER PRIMARY KEY,
-    nom TEXT,
-    ville TEXT,
-    pays TEXT,
-    debut DATE,
-    fin DATE
+.import --skip 1 Data/FIDE_Mars_2025.csv  players_tmp
+.import --skip 1 Data/FIDE_Avril_2025.csv players_tmp
+
+INSERT OR IGNORE INTO players (fide_id, name, title, country, rating, elo_rapid, elo_blitz, birth_year, gender)
+SELECT fide_id,
+       name,
+       title,
+       country,
+       elo_standard,
+       elo_rapid,
+       elo_blitz,
+       birth_year,
+       gender
+FROM   players_tmp;
+
+DROP TABLE players_tmp;
+
+------------------------------------------------------------
+-- Tournaments  (CSV = 6 colonnes identiques au schéma)
+------------------------------------------------------------
+DELETE FROM tournaments;                       -- purger les anciennes lignes
+.import --skip 1 Data/Tournaments.csv tournaments
+
+------------------------------------------------------------
+-- Rankings  (staging + INSERT OR IGNORE)
+------------------------------------------------------------
+DROP TABLE IF EXISTS rankings_tmp;
+CREATE TABLE rankings_tmp (
+    fide_id  INTEGER,
+    rating   INTEGER,
+    rank     INTEGER,
+    month    INTEGER,
+    year     INTEGER
 );
-.mode csv
-.import Data/Tournaments.csv tournaments
 
--- Games imports
-DROP TABLE IF EXISTS games;
-CREATE TABLE games (
-    game_id INTEGER PRIMARY KEY,
-    tournament_id INTEGER,
-    date DATE,
-    joueur_blanc_id TEXT,
-    joueur_noir_id TEXT,
-    resultat TEXT,
-    format TEXT
-);
-.mode csv
-.import Data/Games.csv games
+.import --skip 1 Data/Rankings_Mars.csv  rankings_tmp
+.import --skip 1 Data/Rankings_Avril.csv rankings_tmp
 
--- Registrations imports
-DROP TABLE IF EXISTS registrations;
-CREATE TABLE registrations (
-    registration_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tournament_id INTEGER,
-    fide_id TEXT,
+INSERT OR IGNORE INTO rankings
+SELECT fide_id, rating, rank, month, year
+FROM   rankings_tmp;
+
+DROP TABLE rankings_tmp;
+
+------------------------------------------------------------
+-- Registrations  (Paris Open 2025)
+------------------------------------------------------------
+DROP TABLE IF EXISTS registrations_staging;
+CREATE TABLE registrations_staging (
+    tournament_id     INTEGER,
+    fide_id           INTEGER,
     registration_date DATE,
-    seed INTEGER,
-    bye INTEGER,
-    fee_paid INTEGER
+    seed              INTEGER,
+    bye               INTEGER,
+    fee_paid          BOOLEAN
 );
-.mode csv
-.import Data/ParisOpen2025_registrations.csv registrations
+
+.import --skip 1 Data/ParisOpen2025_registrations.csv registrations_staging
+
+INSERT OR REPLACE INTO registrations
+SELECT tournament_id,
+       fide_id,
+       COALESCE(registration_date, date('now')),
+       seed,
+       COALESCE(bye, 0),
+       COALESCE(fee_paid, 0)
+FROM   registrations_staging;
+
+DROP TABLE registrations_staging;
+
+------------------------------------------------------------
+-- Games  (désactivation puis ré‑activation du trigger)
+------------------------------------------------------------
+DROP TRIGGER IF EXISTS trg_game_registration_check;
+
+.import --skip 1 Data/Games.csv games
+
+CREATE TRIGGER trg_game_registration_check
+BEFORE INSERT ON games
+FOR EACH ROW
+BEGIN
+    SELECT
+        CASE
+            WHEN (SELECT 1
+                  FROM registrations
+                  WHERE tournament_id = NEW.tournament_id
+                    AND fide_id       = NEW.white_id) IS NULL
+              OR (SELECT 1
+                  FROM registrations
+                  WHERE tournament_id = NEW.tournament_id
+                    AND fide_id       = NEW.black_id) IS NULL
+            THEN RAISE(ABORT,
+                       'One or both players are not registered for this tournament')
+        END;
+END;
+
+COMMIT;
+PRAGMA foreign_keys = ON;
