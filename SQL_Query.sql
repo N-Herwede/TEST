@@ -169,7 +169,7 @@ LIMIT  10;
 
 -- SECTION 4 : ÉVOLUTION & ARCHIVAGE
 
--- 4.1  Vue : classement le plus récent
+-- 4.1  Vue du  classement le plus récent
 CREATE VIEW IF NOT EXISTS v_rankings_latest AS
 SELECT r.*
 FROM   rankings AS r
@@ -201,7 +201,7 @@ WHERE  NOT EXISTS (SELECT 1
                      AND month   = strftime('%m','now')
                      AND year    = strftime('%Y','now'));
 
--- 4.4  Vue : évolution Elo entre deux mois
+-- 4.4   évolution Elo entre deux mois
 CREATE VIEW IF NOT EXISTS v_rating_diff AS
 SELECT r1.fide_id,
        p.name,
@@ -252,7 +252,7 @@ ORDER  BY gain DESC;
 
 -- SECTION 5 : AUTOMATISATION 
 
--- 5.1  Trigger : mise à jour automatique du rating
+-- 5.1  Trigger avec mise à jour automatique du rating
 CREATE TRIGGER IF NOT EXISTS trg_update_player_rating
 AFTER INSERT ON rankings
 WHEN NOT EXISTS (SELECT 1

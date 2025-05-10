@@ -121,8 +121,8 @@ Enfin, un script python lancé chaque mois pourrait télécharger les nouveaux f
 
 ## Mise en œuvre
 
-- Créer les tables avec la commande sqlite3 Fide_chess.db < SQL_Schema.sql
-- Charger les données avec sqlite3 Fide_chess.db < SQL_Load_Script.sql. 
+- Créer les tables avec la commande & Charger les données avec 
+- "sqlite3 Fide_chess.db < SQL_Load_Script_Schema.sql." 
 - La base peut être utilisée pour insérer un nouveau tournoi etc..
 - Ou encore activer les vues et les déclencheurs avec sqlite3  dans SQL_Query 
 
