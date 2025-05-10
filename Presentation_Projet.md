@@ -56,10 +56,10 @@ erDiagram
   tournaments {
     INTEGER tournament_id PK
     TEXT    name
-    TEXT    city
-    TEXT    country
     DATE    start_date
     DATE    end_date
+    TEXT    location
+    TEXT    category
   }
   registrations {
     INTEGER tournament_id FK
@@ -74,14 +74,17 @@ erDiagram
     INTEGER game_id       PK
     INTEGER tournament_id FK
     INTEGER round
+    INTEGER board
     INTEGER white_id      FK
     INTEGER black_id      FK
     TEXT    result
-    TEXT    pgn
+    TEXT    termination
   }
   rankings {
-    INTEGER fide_id FK
+    INTEGER fide_id   FK
     INTEGER rating
+    INTEGER elo_rapid
+    INTEGER elo_blitz
     INTEGER rank
     INTEGER month
     INTEGER year
@@ -94,6 +97,7 @@ erDiagram
   players     ||--o{ rankings      : classe
   tournaments ||--o{ registrations : contient
   tournaments ||--o{ games         : accueille
+
 ```
 
 
